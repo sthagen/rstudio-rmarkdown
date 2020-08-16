@@ -25,7 +25,6 @@ html_notebook <- function(toc = FALSE,
                           fig_retina = 2,
                           fig_caption = TRUE,
                           code_folding = "show",
-                          smart = TRUE,
                           theme = "default",
                           highlight = "textmate",
                           mathjax = "default",
@@ -200,7 +199,6 @@ html_notebook <- function(toc = FALSE,
                                fig_retina = fig_retina,
                                fig_caption = fig_caption,
                                code_folding = code_folding,
-                               smart = smart,
                                theme = theme,
                                highlight = highlight,
                                mathjax = mathjax,
@@ -259,7 +257,7 @@ parse_html_notebook <- function(path) {
     if (!identical(c(matches), -1L)) {
       start <- c(attr(matches, "capture.start"))
       end   <- start + c(attr(matches, "capture.length")) - 1
-      decoded <- rawToChar(base64enc::base64decode(substring(line, start, end)))
+      decoded <- rawToChar(xfun::base64_decode(substring(line, start, end)))
       rmd_contents <- strsplit(decoded, "\\r?\\n", perl = TRUE)[[1]]
       next
     }

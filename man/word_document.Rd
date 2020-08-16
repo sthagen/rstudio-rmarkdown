@@ -7,11 +7,11 @@
 word_document(
   toc = FALSE,
   toc_depth = 3,
+  number_sections = FALSE,
   fig_width = 5,
   fig_height = 4,
   fig_caption = TRUE,
   df_print = "default",
-  smart = TRUE,
   highlight = "default",
   reference_docx = "default",
   keep_md = FALSE,
@@ -23,6 +23,8 @@ word_document(
 \item{toc}{\code{TRUE} to include a table of contents in the output}
 
 \item{toc_depth}{Depth of headers to include in table of contents}
+
+\item{number_sections}{\code{TRUE} to number section headings}
 
 \item{fig_width}{Default width (in inches) for figures}
 
@@ -41,10 +43,6 @@ for formats that produce HTML). In addition to the named methods you can
 also pass an arbitrary function to be used for printing data frames. You
 can disable the \code{df_print} behavior entirely by setting the option
 \code{rmarkdown.df_print} to \code{FALSE}.}
-
-\item{smart}{Produce typographically correct output, converting straight
-quotes to curly quotes, \code{---} to em-dashes, \code{--} to en-dashes, and
-\code{...} to ellipses.}
 
 \item{highlight}{Syntax highlighting style. Supported styles include
 "default", "tango", "pygments", "kate", "monochrome", "espresso",

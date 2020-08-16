@@ -28,13 +28,13 @@
 #'
 #' # convert markdown to various formats
 #' pandoc_convert("input.md", to = "html")
-#' pandoc_convert("input.md", to = "pdf")
+#' pandoc_convert("input.md", to = "latex")
 #'
 #' # process citations
 #' pandoc_convert("input.md", to = "html", citeproc = TRUE)
 #'
 #' # add some pandoc options
-#' pandoc_convert("input.md", to="pdf", options = c("--listings"))
+#' pandoc_convert("input.md", to = "latex", options = c("--listings"))
 #' }
 #' @export
 pandoc_convert <- function(input,
@@ -61,6 +61,7 @@ pandoc_convert <- function(input,
   args <- c(input)
   if (!is.null(to)) {
     if (to == 'html') to <- 'html4'
+    if (to == 'pdf') to <- 'latex'
     args <- c(args, "--to", to)
   }
   if (!is.null(from))
@@ -71,8 +72,7 @@ pandoc_convert <- function(input,
     args <- c(args, "--output", output)
 
   # set pandoc stack size
-  stack_size <- getOption("pandoc.stack.size", default = "512m")
-  args <- c(c("+RTS", paste0("-K", stack_size), "-RTS"), args)
+  args <- prepend_pandoc_stack_size(args)
 
   # additional command line options
   args <- c(args, options)
@@ -630,6 +630,12 @@ set_pandoc_info <- function(dir, version = if (!is.null(dir)) get_pandoc_version
   .pandoc$version <- version
 }
 
+# prepend pandoc stack size arguments
+prepend_pandoc_stack_size <- function(args) {
+  stack_size <- getOption("pandoc.stack.size", default = "512m")
+  c(c("+RTS", paste0("-K", stack_size), "-RTS"), args)
+}
+
 # wrap a system call to pandoc so that LC_ALL is not set
 # see: https://github.com/rstudio/rmarkdown/issues/31
 # see: https://ghc.haskell.org/trac/ghc/ticket/7344
@@ -709,17 +715,8 @@ pandoc_citeproc <- function() {
 }
 
 pandoc_lua_filters <- function(...) {
-  args <- c()
   # lua filters was introduced in pandoc 2.0
-  if (pandoc2.0()) {
-    args <- c(
-      rbind(
-        "--lua-filter",
-        pkg_file("rmd", "lua", ...)
-      )
-    )
-  }
-  args
+  if (pandoc2.0()) c(rbind("--lua-filter", pkg_file("rmd", "lua", ...)))
 }
 
 
