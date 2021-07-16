@@ -1,6 +1,7 @@
+# TODO: added for new tests - to remove when switching the package to edition 3
+local_edition(3)
+
 test_that("file.path.ci returns correctly no matter the case", {
-  # TODO: added for new tests - to remove when switching the package to edition 3
-  local_edition(3)
   tmp_dir <- withr::local_tempdir()
   expect_equal(file.path.ci(tmp_dir, "global.R"), file.path(tmp_dir, "global.R"))
 

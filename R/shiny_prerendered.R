@@ -9,8 +9,16 @@ shiny_prerendered_app <- function(input_rmd, render_args) {
   # create the server environment
   server_envir = new.env(parent = globalenv())
 
-  # extract the server-start context
+  # read the html
   html_lines <- strsplit(html, "\n", fixed = TRUE)[[1]]
+
+  # read and remove server-extras (used for both embedded and server.R use cases)
+  server_extras <- shiny_prerendered_extract_context(html_lines, "server-extras")
+  if (length(server_extras) > 0) {
+    html_lines <- shiny_prerendered_remove_contexts(html_lines, "server-extras")
+  }
+
+  # extract the server-start context
   server_start_context <- shiny_prerendered_extract_context(html_lines,
                                                             "server-start")
 
@@ -28,7 +36,7 @@ shiny_prerendered_app <- function(input_rmd, render_args) {
     assign(".shiny_prerendered_server_start_code", server_start_code, envir = server_envir)
 
     # execute the startup code (server_start_context + context="data" loading)
-    eval(parse(text = server_start_context), envir = server_envir)
+    eval(xfun::parse_only(server_start_context), envir = server_envir)
     shiny_prerendered_data_load(input_rmd, server_envir)
 
     # lock the environment to prevent inadvertant assignments
@@ -36,10 +44,11 @@ shiny_prerendered_app <- function(input_rmd, render_args) {
   }
 
   # extract the server context
-  .server_context <- shiny_prerendered_extract_context(html_lines, "server")
+  .server_context <- c(server_extras,
+                       shiny_prerendered_extract_context(html_lines, "server"))
   server_envir$.server_context <- .server_context
   server <- function(input, output, session) {
-    eval(parse(text = .server_context))
+    eval(xfun::parse_only(.server_context))
   }
   environment(server) <- new.env(parent = server_envir)
 
@@ -63,20 +72,23 @@ shiny_prerendered_app <- function(input_rmd, render_args) {
     }
     # server function from server.R
     server_r <- file.path(dirname(input_rmd), "server.R")
-    server <- source(server_r, local = new.env(parent = globalenv()))$value
+    server_r_env = new.env(parent = globalenv())
+    if (length(server_extras) > 0) {
+      eval(xfun::parse_only(server_extras), envir = server_r_env)
+    }
+    server <- source(server_r, local = server_r_env)$value
   } else {
     stop("No server contexts or server.R available for ", input_rmd)
   }
 
-  # attach dependencies to final html
-  html <- htmltools::attachDependencies(html, deps)
+  html_ui <- shiny_prerendered_ui(html, deps)
 
   # create shiny app
   shiny::shinyApp(
-    ui = function(req) html,
+    ui = function(req) html_ui,
     server = server,
     onStart = onStart,
-    uiPattern = "^/$|^(/.*\\.[Rr][Mm][Dd])$"
+    uiPattern = "^/$|^(/.*\\.[Rrq][Mm][Dd])$"
   )
 }
 
@@ -159,7 +171,34 @@ shiny_prerendered_html <- function(input_rmd, render_args) {
     dependencies <- append(dependencies, list(html_dependency_rsiframe()))
 
   # return html w/ dependencies
-  shinyHTML_with_deps(rendered_html, dependencies)
+  html_with_deps <- shinyHTML_with_deps(rendered_html, dependencies)
+
+  # The html template used to render the UI should contain the placeholder
+  # expected by shiny in `shiny:::renderPage()` which uses
+  # `htmltools::renderDocument`.
+  # If it is not present in the template, we add this placeholder at the end of
+  # the <head> element
+  if (!any(grepl(headContent <- "<!-- HEAD_CONTENT -->", html_with_deps, fixed = TRUE))) {
+    html_with_deps <- sub(
+      '</head>',
+      paste0('\n', headContent, '\n</head>'),
+      html_with_deps,
+      fixed = TRUE,
+      useBytes = TRUE)
+    Encoding(html_with_deps) <- "UTF-8"
+  }
+  html_with_deps
+}
+
+shiny_prerendered_ui <- function(html, deps) {
+  # prerendered html is a full document that should not be expanded in shiny::renderPage()
+  # so make shiny aware of that with the attributes 'html_document' to mimic the result of
+  # htmltools::htmlTemplate(document_ = TRUE).
+  # https://github.com/rstudio/rmarkdown/issues/1912
+  html_doc <- htmltools::tagList(html)
+  class(html_doc) <- c("html_document", class(html_doc))
+  # attach dependencies to final html
+  htmltools::attachDependencies(html_doc, deps)
 }
 
 shiny_prerendered_prerender <- function(
@@ -377,9 +416,9 @@ shiny_prerendered_chunk <- function(context, code, singleton = FALSE) {
 
   # verify we are in runtime: shiny_prerendered
   if (!is_shiny_prerendered(knitr::opts_knit$get("rmarkdown.runtime")))
-      stop("The shiny_prerendered_chunk function can only be called from ",
-           "within runtime: shinyrmd",
-           call. = FALSE)
+      stop2("The shiny_prerendered_chunk function can only be called from ",
+           "within a shiny server compatible document"
+      )
 
   # add the prerendered chunk to knit_meta
   knitr::knit_meta_add(list(
@@ -496,7 +535,7 @@ shiny_prerendered_evaluate_hook <- function(input) {
 
     # otherwise parse so we can throw an error for invalid code
     else {
-      parse(text = code)
+      xfun::parse_only(code)
       list()
     }
   }
@@ -587,8 +626,7 @@ shiny_prerendered_append_contexts <- function(runtime, file) {
 
     # validate we are in runtime: shiny_prerendered
     if (!is_shiny_prerendered(runtime)) {
-      stop("The code within this document requires runtime: shinyrmd",
-           call. = FALSE)
+      stop2("The code within this document requires server: shiny")
     }
 
     # open the file

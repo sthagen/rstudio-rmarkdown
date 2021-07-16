@@ -25,6 +25,7 @@ html_document_base <- function(theme = NULL,
                                dependency_resolver = NULL,
                                copy_resources = FALSE,
                                extra_dependencies = NULL,
+                               css = NULL,
                                bootstrap_compatible = FALSE,
                                ...) {
 
@@ -56,6 +57,12 @@ html_document_base <- function(theme = NULL,
   old_theme <- NULL
   pre_knit <- function(input, ...) {
     if (is_bs_theme(theme)) {
+      # merge css file with bslib mechanism...
+      for (f in css) theme <<- bslib::bs_add_rules(theme, xfun::read_utf8(f))
+      # ...and don't process CSS files further in Pandoc
+      css <<- NULL
+
+      # save old theme
       old_theme <<- bslib::bs_global_set(theme)
     }
   }
@@ -83,6 +90,27 @@ html_document_base <- function(theme = NULL,
       args <- c(args, pandoc_variable_arg("theme", theme_arg))
     }
 
+    # Process css files as Pandoc argument if not already been processed by bslib
+    for (f in css) {
+      if (grepl("\\.s[ac]ss$", f)) {
+        if (!xfun::loadable("sass")) {
+          stop2("Using `.sass` or `.scss` file in `css` argument requires the sass package.")
+        }
+        f <- sass::sass(
+          sass::sass_file(f),
+          # write output file to `lib_dir/sass-{sass:::sass_hash()}{[basename(f)}`
+          output = sass_output_template(
+            basename = xfun::sans_ext(basename(f)),
+            tmpdir = lib_dir
+          ),
+          options = sass::sass_options(output_style = "compressed")
+        )
+      }
+      # do not normalize web path
+      if (!xfun::is_web_path(f)) f <- normalized_relative_to(output_dir, f)
+      args <- c(args, "--css", pandoc_path_arg(f, backslash = FALSE))
+    }
+
     # resolve and inject extras, including dependencies specified by the format
     # and dependencies specified by the user (via extra_dependencies)
     format_deps <- list()
@@ -93,14 +121,14 @@ html_document_base <- function(theme = NULL,
       if (is_bs_theme(theme)) {
         theme <- bslib::bs_global_get()
       }
-      bootstrap_deps <- if (is_bs_theme(theme) && is_shiny(runtime)) {
+      bootstrap_deps <- if (is_bs_theme(theme) && is_shiny(runtime, metadata[["server"]])) {
         list(shiny_bootstrap_lib(theme))
       } else {
         bootstrap_dependencies(theme)
       }
       format_deps <- append(format_deps, htmltools::resolveDependencies(bootstrap_deps))
     }
-    else if (isTRUE(bootstrap_compatible) && is_shiny(runtime)) {
+    else if (isTRUE(bootstrap_compatible) && is_shiny(runtime, metadata[["server"]])) {
       # If we can add bootstrap for Shiny, do it
       format_deps <- append(format_deps, bootstrap_dependencies("bootstrap"))
     }
@@ -206,4 +234,27 @@ extract_preserve_chunks <- function(input_file, extract = extractPreserveChunks)
   preserve <- extract(input_str)
   if (!identical(preserve$value, input_str)) write_utf8(preserve$value, input_file)
   preserve$chunks
+}
+
+
+# inspired by sass::output_template but writes to a custom temp dir instead of only tempdir()
+# TODO: use the one from sass package when sass 0.3.2 in on CRAN (rstudio/sass#77)
+sass_output_template <- function(basename = "rmarkdown", dirname = "sass",
+                                 fileext = NULL, tmpdir = tempdir()) {
+  function(options = list(), suffix = NULL) {
+    fileext <- fileext %||% if (isTRUE(options$output_style %in%
+                                       c(2, 3)))
+      ".min.css"
+    else ".css"
+    out_dir <- if (is.null(suffix)) {
+      tempfile(tmpdir = tmpdir, pattern = dirname)
+    }
+    else {
+      file.path(tmpdir, paste0(dirname, suffix))
+    }
+    if (!dir.exists(out_dir)) {
+      dir.create(out_dir, recursive = TRUE)
+    }
+    file.path(out_dir, paste0(basename, fileext))
+  }
 }
