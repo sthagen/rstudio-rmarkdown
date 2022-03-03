@@ -89,6 +89,10 @@ pkg_file_lua <- function(filters = NULL, package = "rmarkdown") {
   pandoc_path_arg(files)
 }
 
+pkg_file_highlight <- function(file) {
+  pkg_file("rmarkdown", "highlight", file, mustWork = TRUE)
+}
+
 #' @rdname rmarkdown_format
 #' @export
 from_rmarkdown <- function(implicit_figures = TRUE, extensions = NULL) {
@@ -106,6 +110,15 @@ from_rmarkdown <- function(implicit_figures = TRUE, extensions = NULL) {
 
 is_null_or_string <- function(text) {
   is.null(text) || (is.character(text) && (length(text) == 1))
+}
+
+# TODO: Export knitr:::is_blank() in xfun, and use here
+is_blank <- function(x) {
+  if (length(x)) {
+    all(grepl("^\\s*$", x))
+  } else {
+    TRUE
+  }
 }
 
 read_utf8 <- function(file) {
