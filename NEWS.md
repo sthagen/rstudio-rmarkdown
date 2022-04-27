@@ -1,11 +1,17 @@
+rmarkdown 2.15
+================================================================================
+
+- The `tufte_handout()` function inside **rmarkdown** is defunct now. Its codebase was moved to the **tufte** package in 2016, and this function was marked as deprecated in 2021. Please use `tufte::tufte_handout()` instead of `rmarkdown::tufte_handout()`. The latter will be removed eventually from this package.
+
+
 rmarkdown 2.14
 ================================================================================
 
-- Impove highlighting theme `arrow` regarding accessibility.
+- Improved highlighting theme `arrow` regarding accessibility.
 
-- Fix an issue with `site_generator()` detection of a site project (thanks, @bhattmaulik, #2344).
+- Fixed an issue with `site_generator()` detection of a site project (thanks, @bhattmaulik, #2344).
 
-- Fix an issue with Shiny prerendered documents and Pandoc not correctly rendering last markdown paragraph in HTML (thanks, @gadenbuie, #2336).
+- Fixed an issue with Shiny prerendered documents and Pandoc not correctly rendering last Markdown paragraph in HTML (thanks, @gadenbuie, #2336).
 
 - Fixed a bug that `site_generator()` fails to detect the root dir of the site and causes infinite recursion (thanks, @fisher-j, #2339).
 
@@ -14,6 +20,7 @@ rmarkdown 2.14
 - `html_document()` can opt-out `code_folding = "show"` or `"hide"` for individual code blocks by adding the `fold-none` class to the code blocks (thanks, @atusy, #2348).
 
 - When using a development version of Pandoc, a `.9999` suffix is appended to version number so that `pandoc_available()` can correctly compared version with last release.
+
 
 rmarkdown 2.13
 ================================================================================
