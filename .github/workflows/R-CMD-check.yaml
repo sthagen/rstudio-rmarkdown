@@ -31,7 +31,6 @@ jobs:
         config:
           # testing R release with latest  pandoc version and their dev version
           - {os: windows-latest, pandoc: 'latest',  r: 'release'}
-          - {os: windows-latest, pandoc: 'latest',  r: 'release'}
           - {os: macOS-latest,   pandoc: 'latest',  r: 'release'}
           - {os: ubuntu-latest,  pandoc: 'nightly', r: 'release'}
           # testing older pandoc versions
@@ -78,7 +77,7 @@ jobs:
           extra-packages: any::rcmdcheck
           needs: check
 
-      - uses: r-lib/actions/setup-pandoc@v2-branch
+      - uses: r-lib/actions/setup-pandoc@v2
         with:
           pandoc-version: ${{ matrix.config.pandoc }}
           token: ${{ secrets.GITHUB_TOKEN }}
