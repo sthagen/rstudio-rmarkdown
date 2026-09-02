@@ -316,7 +316,7 @@ render <- function(input,
 
   # check for required version of pandoc if we are running pandoc
   if (run_pandoc) {
-    required_pandoc <- "1.12.3"
+    required_pandoc <- "2.8"
     pandoc_available(required_pandoc, error = TRUE)
   }
 
@@ -603,9 +603,8 @@ render <- function(input,
     on.exit(knitr::opts_template$restore(templates), add = TRUE)
 
     # specify that htmltools::htmlPreserve() should use the Pandoc raw attribute
-    # by default (e.g. ```{=html}) rather than preservation tokens when pandoc
-    # >= v2.0.
-    if (pandoc2.0() && is.null(prev <- getOption("htmltools.preserve.raw"))) {
+    # by default (e.g. ```{=html}) rather than preservation tokens
+    if (is.null(prev <- getOption("htmltools.preserve.raw"))) {
       options(htmltools.preserve.raw = TRUE)
       on.exit(options(htmltools.preserve.raw = prev), add = TRUE)
     }
@@ -630,7 +629,12 @@ render <- function(input,
       rmarkdown.keep_md = output_format$keep_md,
       rmarkdown.df_print = output_format$df_print,
       rmarkdown.version = 2,
-      rmarkdown.runtime = runtime
+      rmarkdown.runtime = runtime,
+      # directory of the final output document, so that knitr can convert
+      # absolute image paths (e.g. in include_graphics()) to paths relative to
+      # the output location rather than the input/working directory
+      # (yihui/knitr#2171; see also r-lib/pkgdown#2334)
+      rmarkdown.output_dir = normalize_path(output_dir)
     )
 
     # read root directory from argument (has precedence) or front matter
@@ -993,6 +997,12 @@ render <- function(input,
       status
     }
     texfile <- file_with_ext(output_file, "tex")
+    # when pandoc is given a bare output filename, it writes the .tex next to
+    # its input (the knitted .md); if that input lives in an intermediates
+    # directory, resolve texfile to that actual location so that
+    # patch_tex_output() and latexmk() below can find it (#2183)
+    if (basename(texfile) == texfile)
+      texfile <- file.path(dirname(input), texfile)
     # determine whether we need to run citeproc (based on whether we have
     # references in the input)
     run_citeproc <- citeproc_required(front_matter, input_lines)
@@ -1004,15 +1014,29 @@ render <- function(input,
       convert(texfile, run_citeproc && !need_bibtex)
       # patch the .tex output generated from the default Pandoc LaTeX template
       if (!("--template" %in% output_format$pandoc$args)) patch_tex_output(texfile)
-      fix_horiz_rule(texfile)
       # unless the output file has the extension .tex, we assume it is PDF
       if (!grepl('[.]tex$', output_file)) {
-        latexmk(texfile, output_format$pandoc$latex_engine, '--biblatex' %in% output_format$pandoc$args)
+        # run latexmk in the directory of the .tex file (i.e. the output
+        # directory) so that LaTeX aux files (.aux, .log, ...) are written there
+        # instead of the working directory (the input directory), which may be
+        # read-only, e.g. in production/Shiny settings (#1975, #1615)
+        xfun::in_dir(dirname(texfile), latexmk(
+          basename(texfile), output_format$pandoc$latex_engine,
+          '--biblatex' %in% output_format$pandoc$args
+        ))
         file.rename(file_with_ext(texfile, "pdf"), output_file)
         # clean up the tex file if necessary
         if (!output_format$pandoc$keep_tex) {
           texfile <- normalize_path(texfile)
           on.exit(unlink(texfile), add = TRUE)
+        } else {
+          # if we kept the .tex but it was written to the intermediates
+          # directory, move it next to the output so it is not left behind in
+          # (or cleaned away with) the intermediates directory (#2183)
+          wanted_tex <- file_with_ext(output_file, "tex")
+          if (!same_path(texfile, wanted_tex, must_work = FALSE) &&
+              file.exists(texfile))
+            file.rename(texfile, wanted_tex)
         }
       }
     } else {
@@ -1211,6 +1235,7 @@ resolve_df_print <- function(df_print) {
 .globals <- new.env(parent = emptyenv())
 .globals$evaluated_global_chunks <- character()
 .globals$level <- 0L
+.globals$tmpfiles <- NULL
 
 
 #' The output metadata object
