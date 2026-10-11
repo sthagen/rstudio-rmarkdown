@@ -347,8 +347,19 @@ shiny_prerendered_append_dependencies <- function(input, # always UTF-8
         dependency$package <- package_desc$Package
         # named to something that doesn't start with 'package' to deter lazy name matching
         dependency$pkgVersion <- package_desc$Version
-        dependency$src$file <- normalized_relative_to(package_dir,
-                                                      dependency$src$file)
+        # make src$file relative to the package's *installed* layout: in a
+        # source package (e.g. dev-loaded with pkgload::load_all()) files
+        # under inst/ are installed at top-level, so the path must be relative
+        # to inst/ to be resolvable later with system.file() (whose pkgload
+        # shim rejects paths starting with "inst/")
+        src_file <- normalized_relative_to(file.path(package_dir, "inst"),
+                                           dependency$src$file)
+        # not under inst/ (e.g. an installed package): use the package root
+        if (!is_relative(src_file)) {
+          src_file <- normalized_relative_to(package_dir,
+                                             dependency$src$file)
+        }
+        dependency$src$file <- src_file
       }
     }
 
@@ -405,7 +416,7 @@ shiny_prerendered_extract_context_serialized <- function(html_lines, context = "
 #' Clean prerendered content for the specified Rmd input file
 #'
 #' Remove the associated html file and supporting _files directory
-#' for a shiny_prerendered documet.
+#' for a shiny_prerendered document.
 #'
 #' @param input Rmd input file to clean content for
 #'
